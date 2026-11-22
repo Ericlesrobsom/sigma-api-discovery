@@ -123,16 +123,18 @@ maestri recruit "<codename>" --role "Sigma Batedor"
 
 ## Fase 1 — recon passivo (Batedor)
 
-Instalar o farejador de ambiente (não altera a página; só lê):
-
-```bash
-maestri portal evaluate "Sigma" "$(cat assets/inspecionar.js)"
-```
-
-No PowerShell:
+Instalar o farejador de ambiente (não altera a página; só lê). Use sempre o
+loader — passar JS com aspas duplas direto pelo PowerShell faz o `maestri.exe`
+receber o script corrompido:
 
 ```powershell
-maestri portal evaluate "Sigma" (Get-Content -Raw "assets\inspecionar.js")
+$S = "$HOME\.agents\skills\sigma-api-discovery"
+& "$S\assets\avaliar.ps1" -Portal "Sigma" -Arquivo "$S\assets\inspecionar.js"
+```
+
+```bash
+# bash / WSL
+~/.agents/skills/sigma-api-discovery/assets/avaliar.sh "Sigma" ~/.agents/skills/sigma-api-discovery/assets/inspecionar.js
 ```
 
 O retorno traz: frameworks (`__NEXT_DATA__`, `__NUXT__`, React/Vue),
@@ -167,8 +169,8 @@ em 4 KB.
 Instalar **antes** de cada fluxo relevante (o hook morre em reload/navegação
 completa):
 
-```bash
-maestri portal evaluate "Sigma" "$(cat assets/hook-rede.js)"
+```powershell
+& "$S\assets\avaliar.ps1" -Portal "Sigma" -Arquivo "$S\assets\hook-rede.js"
 ```
 
 Confirmar: deve responder `hook instalado`. Se responder
@@ -179,8 +181,8 @@ Fluxo de captura, repetido para cada ação:
 1. Limpar o buffer:
    `maestri portal evaluate "Sigma" "window.__sigmaCap = []; 'limpo'"`
 2. Executar **uma** ação na UI (`click`, `fill`, `select`, `key`).
-3. Ler o buffer:
-   `maestri portal evaluate "Sigma" "$(cat assets/exportar.js)"`
+3. Ler o buffer com o loader:
+   `& "$S\assets\avaliar.ps1" -Portal "Sigma" -Arquivo "$S\assets\exportar.js"`
 4. Copiar para a nota de capturas, já sanitizado.
 5. Limpar de novo antes do próximo fluxo.
 
@@ -337,11 +339,14 @@ Qualidade mínima:
 - `assets/hook-rede.js` — hook idempotente de `fetch`/XHR com redação.
 - `assets/exportar.js` — exporta o buffer em JSON.
 - `assets/inspecionar.js` — frameworks, storages, cookies, scripts, recursos.
+- `assets/avaliar.ps1` / `assets/avaliar.sh` — loader base64 que executa um
+  `.js` no portal sem o stripping de aspas do PowerShell.
 - `assets/relatorio-template.md` — esqueleto do mapa.
 
 Caminhos relativos ao diretório desta skill (`~/.agents/skills/sigma-api-discovery`).
-Em PowerShell, trocar `$(cat ...)` por `(Get-Content -Raw ...)` e usar
-aspas simples em refs (`'@e3'`), senão o `@` é interpretado como splatting.
+**PowerShell:** nunca passar JS com aspas duplas direto para `maestri portal
+evaluate` (o Windows come as aspas e o script chega corrompido). Usar sempre
+`avaliar.ps1`. Refs (`@e3`) vão entre aspas simples, senão o `@` é splatting.
 
 ## Orquestração do time (4 agentes)
 
