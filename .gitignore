@@ -20,6 +20,10 @@ _erros*
 capturar.ps1
 exportar-b64.js
 
+# bundles JS proprietários (licença AI-NO-REPRODUCE) — somente locais
+bundles/
+docs/bundles.md
+
 # dependências/build
 node_modules/
 client/bin/
