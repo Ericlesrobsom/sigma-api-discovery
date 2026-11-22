@@ -1,0 +1,15 @@
+# segredos e artefatos locais
+.env
+.env.*
+*.local
+*.log
+
+# capturas cruas (não sanitizadas) nunca entram
+captures/raw/
+capturas/raw/
+*.har
+*.jsonl
+
+# dependências/build
+node_modules/
+client/bin/
