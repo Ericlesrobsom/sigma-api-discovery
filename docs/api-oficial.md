@@ -606,17 +606,22 @@ WebhookWithSecret = Webhook & {
 
 Respostas de cada operação:
 
-| Operação | Envelope | Schema |
+| Operação | Envelope | Nome no spec |
 |---|---|---|
-| `GET /me/dns` | `{data: OwnDnsEntry[]}` | `OwnDnsCollection` |
-| `PUT /me/dns` | `{data:{updated_count}}` | `OwnDnsUpdated` |
-| `GET /resellers/dns` | `{data: ResellerDnsEntry[], pagination}` | `ResellerDnsCollection` |
-| `GET /resellers/{reseller}/dns` | `{data: ResellerDnsEntry[], pagination}` | `ResellerDnsCollection` |
-| `PUT /resellers/{reseller}/dns` | `{data: DnsMutation}` | `DnsMutation` |
-| `POST /resellers/dns/replace` | `{data: DnsMutation}` | `DnsMutation` |
-| `POST /resellers/dns/apply` | `{data: DnsMutation}` | `DnsMutation` |
-| `GET /resellers/dns/history` | `{data: DnsHistoryEntry[], pagination}` | `DnsHistoryCollection` |
-| `POST /resellers/dns/history/{batch}/revert` | `{data: DnsRevertResult}` | `DnsRevert` |
+| `GET /me/dns` | `{data: OwnDnsEntry[]}` | response `OwnDnsCollection` |
+| `PUT /me/dns` | `{data:{updated_count}}` | response `OwnDnsUpdated` |
+| `GET /resellers/dns` | `{data: ResellerDnsEntry[], pagination}` | response `ResellerDnsCollection` |
+| `GET /resellers/{reseller}/dns` | `{data: ResellerDnsEntry[], pagination}` | response `ResellerDnsCollection` |
+| `PUT /resellers/{reseller}/dns` | `{data: DnsMutation}` | schema `DnsMutation` |
+| `POST /resellers/dns/replace` | `{data: DnsMutation}` | schema `DnsMutation` |
+| `POST /resellers/dns/apply` | `{data: DnsMutation}` | schema `DnsMutation` |
+| `GET /resellers/dns/history` | `{data: DnsHistoryEntry[], pagination}` | response `DnsHistoryCollection` |
+| `POST /resellers/dns/history/{batch}/revert` | `{data: DnsRevertResult}` | response `DnsRevert` |
+
+> `OwnDnsCollection`, `OwnDnsUpdated`, `ResellerDnsCollection`,
+> `DnsHistoryCollection` e `DnsRevert` são **responses** em
+> `components.responses`, não schemas em `components.schemas`. O schema do
+> objeto interno está indicado no envelope.
 
 ```ts
 OwnDnsEntry {
@@ -666,9 +671,8 @@ DnsRevertResult {
   skipped_count: integer
 }
 
-OwnDnsUpdated {
-  updated_count: integer
-}
+// PUT /me/dns devolve {data:{updated_count}} (response OwnDnsUpdated;
+// não existe schema nomeado para o objeto interno)
 ```
 
 Notas:
