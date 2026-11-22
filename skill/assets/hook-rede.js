@@ -1,8 +1,8 @@
 (() => {
   if (window.__sigmaCap) return 'hook ja instalado';
 
-  const MAX = 300;
-  const TRUNC = 4096;
+  const MAX = 200;
+  const TRUNC = 131072; // 128 KB: cortar JSON no meio quebra o shape
   const SENSIVEL = /(authorization|token|api[_-]?key|senha|password|secret|cookie|set-cookie|cpf|cnpj|e-?mail|telefone|phone|whatsapp)/i;
 
   const redigirURL = (u) => String(u || '').replace(
@@ -72,6 +72,7 @@
       reg.respHeaders = redigirObj(headersParaObjeto(resp.headers));
       resp.clone().text().then((txt) => {
         reg.respBody = redigirTexto(txt);
+        reg.respTruncado = reg.respBody.length >= TRUNC;
         reg.ms = Math.round(performance.now() - t0);
       }).catch(() => { reg.respBody = '[corpo nao textual]'; });
       return resp;
@@ -102,6 +103,7 @@
       this.addEventListener('load', () => {
         reg.status = this.status;
         reg.respBody = redigirTexto(this.responseText || '');
+        reg.respTruncado = reg.respBody.length >= TRUNC;
         reg.ms = Math.round(performance.now() - t0);
         push(reg);
       });

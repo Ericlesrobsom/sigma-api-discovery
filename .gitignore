@@ -6,9 +6,19 @@
 
 # capturas cruas (não sanitizadas) nunca entram
 captures/raw/
-capturas/raw/
+capturas/
+captures/
 *.har
 *.jsonl
+*.b64
+*.out
+
+# artefatos de prospecção locais
+_probe*
+_replay*
+_erros*
+capturar.ps1
+exportar-b64.js
 
 # dependências/build
 node_modules/

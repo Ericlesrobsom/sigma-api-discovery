@@ -163,8 +163,8 @@ clássico. `snapshot` dá os `@eN` para clicar.
 
 O portal permite `evaluate`, então dá para **embrulhar `fetch` e
 `XMLHttpRequest` antes de disparar o fluxo**. O hook é idempotente e
-redige segredos sozinho; ele guarda no máximo 300 registros e corta corpos
-em 4 KB.
+redige segredos sozinho; ele guarda no máximo 200 registros e corta corpos
+em 128 KB, marcando `respTruncado` quando corta (JSON cortado não é shape).
 
 Instalar **antes** de cada fluxo relevante (o hook morre em reload/navegação
 completa):
