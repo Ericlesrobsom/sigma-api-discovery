@@ -982,96 +982,34 @@ curl -sS \
 - Para inspecionar a cota sem mutar nada, use `GET /me` com `-i` (foi o
   exemplo do próprio `llms.txt`).
 
-## 12. Limitações da conta `revenda-pos`
+## 12. Limitações de uma conta de revenda
 
-Esta seção combina **evidência do painel** (não do spec) com as regras que o
-spec impõe a uma conta de revenda. As duas fontes estão separadas.
+O contrato vale para a conta dona do token e para os recursos que ela possui:
 
-### 12.1 O que foi observado na conta (painel)
-
-Fonte rastreada: `docs/auditoria.md` §A14/A17. Os detalhes de menus, spinner e
-volumes vêm de uma captura local **não versionada** (`NOTA-capturas.md` e
-`capturas/`, ambos no `.gitignore`): ficam registrados como evidência
-operacional ilustrativa, **não reproduzível apenas com o repositório** e nunca
-como contrato. Para reauditar, usar o hash/timestamp da captura original.
-
-- Papel `revenda-pos`, `is_master=false`, `parent_user_id=null`, status
-  `ACTIVE`, `membership_active=YES`; o snapshot auditado tem **54 permissões
-  de conta** (3 amostradas), conforme `docs/auditoria.md` §A14.
-- É uma **revenda raiz**, não admin mestre do painel.
-- Menus ausentes nessa conta (evidência local): **Servidores** (o grupo
-  Sistema só tem Planos e Pacote de Créditos), tickets/suporte,
-  logs/auditoria e configurações globais.
-- A tela “Novos Conteúdos” (`#/content`) consome `/api/servers` e fica em
-  spinner, sem concluir a lista (evidência local).
-- Apesar do menu ausente, `GET /api/servers` do **painel** responde e é usado
-  por outras telas. Ou seja: menu escondido ≠ endpoint inexistente.
-- Volume visto na sessão (evidência local): 253 clientes, 32 pacotes, 2
-  servidores, 255 lançamentos de crédito. São **contagens da sessão**, não
-  limites do contrato.
-
-**Não confundir os dois números:** 54 são **permissões de conta** no painel;
-36 são **escopos de token** do contrato oficial. São conceitos diferentes e
-o spec **não publica** um mapa 1:1 entre eles.
-
-### 12.2 O que o contrato oficial restringe
-
-- `/customers*` opera sobre “customers you own”; recurso de outro ator
-  retorna `404` (`NotFound`: “not found (or not owned by the actor)”).
-- `/resellers` é descrito como “downline resellers”. `/reports/membership`
-  lista apenas **revendas filhas diretas** com membership ativa.
-- Listagem/edição de DNS cobre **somente revendas diretas**, “regardless of
-  depth permissions”; qualquer outra retorna `404`.
-- `/packages` e `/servers` são **read-only**; não há operação de escrita de
-  catálogo no contrato 1.0.0.
-- Não existe, no contrato 1.0.0, endpoint para configuração do painel,
-  usuários/papéis, gateways de pagamento, tickets, logs ou exportações.
+- `/customers*` opera sobre clientes da própria conta; recurso de outro ator
+  retorna `404`.
+- `/resellers` cobre revendas downline; `/reports/membership` lista apenas
+  revendas filhas diretas com membership ativa.
+- Listagem/edição de DNS cobre somente revendas diretas.
+- `/packages` e `/servers` são **read-only**; não há escrita de catálogo no
+  contrato 1.0.0.
+- Não há endpoint para configuração do painel, usuários/papéis, gateways de
+  pagamento, tickets, logs ou exportações.
 - `/me/webhooks*` exige **sessão do painel**; token de API não é aceito.
 - Cada chamada exige **escopo no token + permissão na conta**. Sem
   `use reseller api` → `403 permission_denied`; assinatura ausente/expirada →
   `402`; IP fora da allowlist → `403 ip_not_allowed`.
 
-### 12.3 O que ainda não se pode afirmar (pendente)
+Pontos que dependem da conta e só um teste com token resolve:
 
-- Se a conta consegue **criar token** — a página de integração pode não estar
-  disponível para o papel `revenda-pos`.
-- Quais dos **36 escopos** o papel concede. O token só recebe o que for
-  marcado, e a conta só passa se tiver a permissão correspondente; o spec não
-  publica o mapa papel → permissão.
-- Status real da assinatura: confirmar em `GET /me` →
-  `integrationStatus[key="resellerApi"].status`.
-- Se `servers.read` e `GET /servers` funcionam para esta conta. O spec
-  permite; a UI esconde o menu. Só um teste com token resolve.
-- Se 120 req/min bastam para o volume da operação; medir
-  `X-RateLimit-Remaining` em uso real.
-- Quaisquer limites de profundidade além dos explicitamente citados
-  (DNS e membership são “direct”; o resto não declara profundidade).
+- se a conta consegue criar token e quais dos 36 escopos ela concede;
+- status da assinatura em `GET /me` → `integrationStatus`;
+- se `servers.read` está disponível para a conta;
+- se 120 req/min bastam para o volume real (medir `X-RateLimit-Remaining`).
 
-### 12.4 Não confundir painel (`/api/*`) com API oficial (`/api/reseller-api/v1/*`)
-
-O prefixo `/api/*` é a API interna do painel; o prefixo
-`/api/reseller-api/v1/*` é o contrato oficial. Shapes, paginação e tipos
-**não** são os mesmos. Exemplo registrado na auditoria
-(`docs/auditoria-oficial.md` §10/F7):
-
-| | Painel | Oficial |
-|---|---|---|
-| Rota de servidores | `GET /api/servers` | `GET /servers` |
-| `is_isplock` | `0` (number) | `"YES" \| "NO" \| null` |
-| `packages[]` | presente no item de servidor | não existe no `Server` oficial |
-| `reseller_action` | presente no painel | não existe no `Server` oficial |
-
-| | Painel | Oficial |
-|---|---|---|
-| Perfil | `GET /api/auth/me` | `GET /me` |
-| Paginação de clientes | `page` / `perPage` | `page` / `per_page` |
-
-A coluna **Painel** desta seção é evidência local (§12.1), não contrato; a
-coluna **Oficial** vem do spec.
-
-Nunca reutilize o shape do painel no cliente oficial. O `auth/me` do painel
-**não** é este contrato e não deve ser usado como referência de shape para o
-cliente oficial.
+A API interna do painel (`/api/*`) **não** é este contrato: shapes,
+paginação e tipos são outros. Não reutilize o shape interno no cliente
+oficial.
 
 ## 13. O que o spec não afirma
 
@@ -1098,6 +1036,4 @@ Para evitar alias inventado, ficam explícitos os pontos sem contrato:
 ---
 
 Documento escrito em 2026-11-22 a partir de `docs/official-api/openapi.json`
-e `docs/official-api/llms.txt`; a seção 12 usa `docs/auditoria.md` e
-`docs/auditoria-oficial.md` (rastreados) e uma captura local **não
-versionada**, explicitada em §12.1. Nenhum token real foi incluído.
+e `docs/official-api/llms.txt`. Nenhum token real foi incluído.

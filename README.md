@@ -1,14 +1,14 @@
 # sigma-api-discovery
 
-Descoberta e mapa da API interna do painel **Sigma** (ESPACEONEPLAY) feita
-**somente pelo navegador**, sem acesso ao código-fonte, usando o portal do
-Maestri e um time de 4 agentes.
+Descoberta do painel **Sigma** (ESPACEONEPLAY) e documentação da sua **API
+oficial de revenda** (OpenAPI 3.1), com uma skill de 4 agentes para mapear
+painéis pelo navegador quando não houver contrato público.
 
 ## Objetivo
 
-Reconstruir os endpoints, a autenticação e os shapes de request/response do
-painel Sigma (clientes, planos, servidores, revendas, financeiro, relatórios)
-com evidência real — **sem adivinhar campo nem alias**.
+Documentar o contrato oficial (clientes, planos, servidores, revendas, DNS,
+relatórios e webhooks) e manter a skill de descoberta para lacunas de UI —
+**sem adivinhar campo nem alias**.
 
 O método nasceu do caso Ative App no goiptv: um alias errado
 (`historico_id` x `id_cobranca`) custou uma ativação paga e um id perdido.
@@ -17,13 +17,12 @@ Aqui vale a mesma regra: só campo observado vira contrato.
 ## Estado atual
 
 - Alvo: `https://espaceoneplay.sigmab.pro`
-- Sessão de teste autenticada (2FA desativada)
-- SPA Vue + Vite; API interna em `/api`; token em `localStorage.token`
-- **API oficial descoberta:** Sigma Reseller API v1 (OpenAPI 3.1, 39 paths /
-  51 operações) em `/api/reseller-api/v1` — ver
+- **API oficial:** Sigma Reseller API v1 (OpenAPI 3.1, 39 paths / 51
+  operações) em `/api/reseller-api/v1` — ver
   [`docs/api-oficial.md`](docs/api-oficial.md)
-- Recon inicial e primeiros endpoints em [`docs/capturas.md`](docs/capturas.md)
-- Mapa interno em construção em [`docs/mapa.md`](docs/mapa.md)
+- **Serviço Rust que consome a API:**
+  [Ericlesrobsom/sigma-api](https://github.com/Ericlesrobsom/sigma-api)
+- Skill de descoberta em [`skill/SKILL.md`](skill/SKILL.md)
 
 ## Estrutura
 
@@ -31,14 +30,9 @@ Aqui vale a mesma regra: só campo observado vira contrato.
 docs/
   api-oficial.md # API oficial: auth, escopos, endpoints, webhooks
   official-api/  # openapi.json + llms.txt (documentação pública)
-  mapa.md        # mapa da API interna (observado x inferido x pendente)
-  capturas.md    # evidências sanitizadas por fluxo
-  decisoes.md    # escopo, papéis e regras
-  auditoria.md   # achados do Auditor
 skill/
   SKILL.md       # skill do Maestri (4 agentes)
   assets/        # hook de rede, inspetor, loader, template
-client/          # futuro cliente (Go) — ainda não iniciado
 ```
 
 `bundles/` (JS proprietário baixado para análise) fica **somente local** e no
