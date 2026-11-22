@@ -7,8 +7,9 @@
 > o texto antes do bloco JSON.
 >
 > Contagens conferidas no spec: **39 paths**, **51 operações**, **36 escopos
-> distintos**. Nenhuma chamada de rede foi feita para produzir este
-> documento. Nenhum token real aparece aqui.
+> distintos**. Nenhuma chamada de rede nova foi feita nesta atualização: o
+> contrato vem só do spec; a §12 usa evidência de capturas anteriores do
+> painel, marcada como tal. Nenhum token real aparece aqui.
 
 ## 1. Identificação e URL base
 
@@ -53,12 +54,13 @@ Authorization: Bearer <token>
 | Esquema | Usado por | Regra |
 |---|---|---|
 | `bearerAuth` | todas as operações exceto `/me/webhooks*` | token de API de revenda |
-| `panelSessionAuth` | `/me/webhooks*` | credencial de sessão do painel (Sanctum); **token de API não é aceito** |
+| `panelSessionAuth` | `/me/webhooks*` | **HTTP Bearer** de sessão do painel (Sanctum); **token de API não é aceito** |
 
 O `security` global é `bearerAuth`, mas cada operação de webhook declara
 `security: [{"panelSessionAuth": []}]` no nível da operação
 (`paths./me/webhooks.get.security` e irmãs). O próprio spec diz: “A Reseller
 API token is NOT accepted here” (`components.securitySchemes.panelSessionAuth`).
+Os dois esquemas são `type: http`, `scheme: bearer`; **nenhum é cookie**.
 
 ## 3. Como criar o token em Integrações
 
@@ -100,13 +102,14 @@ Cada operação declara `x-required-scope`. São **36 escopos distintos**:
 | Catálogos | `packages.read`, `servers.read` |
 | Relatórios | `reports.customers-count`, `reports.resellers-count`, `reports.membership`, `reports.low-credits`, `reports.new-resellers`, `reports.expiring` |
 
-Regra de decisão (`info.description`):
+O spec enumera **três motivos possíveis** para `403`, mas **não define
+precedência** quando mais de um falha. Trate como três respostas possíveis,
+sem usar a ordem para lógica de negócio (`components.responses.TokenForbidden`):
 
-1. Token sem o escopo da operação → `403 insufficient_scope`.
-2. Token com o escopo, mas conta sem a permissão correspondente (ou sem
-   `use reseller api`) → `403 permission_denied`.
-3. Token com escopo e permissão, mas IP fora da allowlist →
-   `403 ip_not_allowed`.
+- `insufficient_scope` — o token não tem o `x-required-scope` da operação.
+- `permission_denied` — a conta não tem a permissão que o escopo exige, ou o
+  dono removeu `use reseller api` do papel.
+- `ip_not_allowed` — o IP de origem está fora da allowlist do token.
 
 As operações de `/me/webhooks*` **não têm** `x-required-scope`: são de sessão
 do painel.
@@ -232,16 +235,30 @@ Filtros: `status`, `customer_id`, `code` (`paths./coupons.get.parameters`).
 | 32 | GET | `/resellers/dns/history` | Histórico de mudanças de DNS, mais recente primeiro | `resellers.dns.history` |
 | 33 | POST | `/resellers/dns/history/{batch}/revert` | Reverte um lote de mudanças | `resellers.dns.revert` |
 
+Respostas (shapes completos em §8.8):
+
+| Operação | Envelope |
+|---|---|
+| `GET /me/dns` | `{data: OwnDnsEntry[]}` (sem `meta`) |
+| `PUT /me/dns` | `{data:{updated_count}}` (`OwnDnsUpdated`) |
+| `GET /resellers/dns` e `GET /resellers/{reseller}/dns` | `{data: ResellerDnsEntry[], pagination}` |
+| `PUT /resellers/{reseller}/dns`, `POST /resellers/dns/replace`, `POST /resellers/dns/apply` | `{data: DnsMutation}` |
+| `GET /resellers/dns/history` | `{data: DnsHistoryEntry[], pagination}` |
+| `POST /resellers/dns/history/{batch}/revert` | `{data: DnsRevertResult}` |
+
 Regras explícitas do spec:
 
 - Listagem e edição cobrem **somente revendas diretas**, “regardless of depth
   permissions”; qualquer outra revenda retorna `404`.
 - `apply` tem modos `empty` (só quem não tem DNS) e `all` (sobrescreve todas).
+- `apply` retorna `422` em `server_id` quando você **não tem DNS próprio**
+  para aquele servidor.
 - `revert` pula entradas alteradas depois; `404` se o lote não tocou você ou
   suas diretas; `403` se tocou alguém mais profundo; `422` se já foi revertido
   ou não há o que reverter.
-- Em `PUT /me/dns` e `PUT /resellers/{reseller}/dns`, servidor indisponível
-  retorna `403` **com apenas `message`** (sem o campo `error`).
+- Em `PUT /me/dns`, `PUT /resellers/{reseller}/dns` e
+  `POST /resellers/dns/apply`, servidor indisponível retorna `403` **com
+  apenas `message`** (sem o campo `error`; ver §10).
 
 ### 6.6 Catálogos (2 / 2)
 
@@ -322,7 +339,8 @@ não do contrato oficial).
 | Evento de webhook | envelope `id` | string **ULID**, igual em toda retentativa |
 | Linha de DNS de revenda | `id` | `userHash:serverHash` |
 | Data/hora | `*_at`, `expires_at`, `occurred_at` | string `date-time` (ISO 8601) |
-| Dinheiro em centavos | `Coupon.value` (FIXED), `MembershipAmount.membership_total` e `membership_breakdown[].price/amount` | integer; unidade declarada em centavos no spec |
+| Cupom | `value` | integer; **`PERCENTAGE` = 1–100**; **`FIXED` = centavos** (§8.3) |
+| Dinheiro em centavos | `MembershipAmount.membership_total` e `membership_breakdown[].price/amount` | integer; unidade declarada em centavos no spec |
 
 Campos `YES`/`NO` são **string**, não boolean (`Customer.is_trial`,
 `Reseller.membership_active`, etc.). `Customer.connections` é integer;
@@ -361,7 +379,8 @@ amount, is_average_price, server_connections[]}`).
 
 ### 8.2 `Customer`
 
-`required: []` — nenhum campo é declarado obrigatório na resposta.
+Sem `required` no schema — nenhum campo é declarado obrigatório na resposta
+(N1: o spec **não** traz `required: []` literal; apenas omite a chave).
 
 ```ts
 Customer {
@@ -408,7 +427,73 @@ Customer {
 }
 ```
 
-### 8.3 `Package`
+### 8.3 `Coupon` e `CouponCreate`
+
+**Atenção ao `value`:** o mesmo campo muda de unidade conforme `type`.
+`PERCENTAGE` → percentual de **1 a 100**; `FIXED` → **centavos**.
+`value: 50` é 50% com `PERCENTAGE` e R$ 0,50 com `FIXED`. Nunca converta
+por analogia (`components.schemas.Coupon.value`).
+
+```ts
+Coupon {
+  id: string
+  code: string
+  description: string | null
+  type: "FIXED" | "PERCENTAGE"
+  value: integer                  // PERCENTAGE: 1..100; FIXED: centavos
+  status: "ACTIVE" | "INACTIVE"
+  state: "ACTIVE" | "INACTIVE" | "EXHAUSTED" | "SCHEDULED" | "EXPIRED"
+  max_uses: integer | null        // null ou 0 = ilimitado
+  max_uses_per_customer: integer | null   // null ou 0 = ilimitado
+  used_count: integer             // checkouts criados, pagos ou não; conta para max_uses
+  paid_count: integer             // pedidos pagos
+  remaining_uses: integer | null  // null = ilimitado
+  customer_id: string | null      // só este cliente pode usar
+  package_id: string | null       // desconto só ao pagar este pacote
+  valid_from: string | null       // date-time
+  valid_until: string | null      // date-time
+  created_at: string | null       // date-time
+  updated_at: string | null       // date-time
+}
+```
+
+`status` é o estado configurado; `state` é se o checkout aceita o código
+**agora** (descrição do campo). Os dois podem divergir: um cupom `ACTIVE`
+pode estar `SCHEDULED`, `EXHAUSTED` ou `EXPIRED`.
+
+```ts
+CouponCreate {
+  // required: type, value
+  type: "FIXED" | "PERCENTAGE"
+  value: integer                  // mínimo 1; PERCENTAGE 1..100; FIXED centavos
+  description?: string | null     // maxLength 255
+  status?: "ACTIVE" | "INACTIVE"  // default ACTIVE
+  max_uses?: integer | null       // mínimo 0; null/0 ilimitado; 1 = uso único
+  max_uses_per_customer?: integer | null   // mínimo 0; null/0 ilimitado
+  valid_from?: string | null      // date-time; sem offset = UTC
+  valid_until?: string | null     // date-time; futuro e depois de valid_from
+  customer_id?: string | null     // Hashid de cliente seu
+  package_id?: string | null      // Hashid de pacote ativo não-trial
+}
+```
+
+Regras de criação (`paths./coupons.post`):
+
+- O código é gerado pela Sigma; **não** envie `code`.
+- `valid_until` precisa ser futuro e posterior a `valid_from`; sem offset,
+  o spec assume UTC.
+- `max_uses: 1` cria cupom de uso único. `used_count` conta todo checkout
+  criado com o cupom, pago ou não; `paid_count` conta só os pagos;
+  `remaining_uses` é `null` quando ilimitado.
+- `customer_id` e `package_id` são Hashids. `package_id` precisa ser pacote
+  ativo e não-trial de `GET /packages`; com `customer_id`, precisa estar no
+  servidor daquele cliente.
+- O schema de `CouponCreate` declara apenas `minimum: 1`; o teto **100** para
+  `PERCENTAGE` está na descrição do campo, não em `maximum`. No `Coupon` de
+  resposta, `value` não declara mínimo nem máximo — a unidade e a faixa estão
+  só na descrição. Não gere validação apenas pelo schema.
+
+### 8.4 `Package`
 
 ```ts
 Package {
@@ -431,7 +516,7 @@ Package {
 }
 ```
 
-### 8.4 `Server`
+### 8.5 `Server`
 
 ```ts
 Server {
@@ -453,9 +538,10 @@ Server {
 }
 ```
 
-### 8.5 `Reseller`
+### 8.6 `Reseller`
 
-`required: []`.
+Sem `required` no schema — nenhum campo é declarado obrigatório (N1: o spec
+não traz `required: []` literal).
 
 ```ts
 Reseller {
@@ -494,7 +580,7 @@ Reseller {
 }
 ```
 
-### 8.6 `Webhook` e `WebhookWithSecret`
+### 8.7 `Webhook` e `WebhookWithSecret`
 
 ```ts
 Webhook {
@@ -516,7 +602,85 @@ WebhookWithSecret = Webhook & {
 **precisa ser HTTPS**; hosts internos e faixas de IP privadas são rejeitados
 (`components.schemas.WebhookCreate`).
 
-### 8.7 Bodies de escrita (resumo)
+### 8.8 Schemas de DNS
+
+Respostas de cada operação:
+
+| Operação | Envelope | Schema |
+|---|---|---|
+| `GET /me/dns` | `{data: OwnDnsEntry[]}` | `OwnDnsCollection` |
+| `PUT /me/dns` | `{data:{updated_count}}` | `OwnDnsUpdated` |
+| `GET /resellers/dns` | `{data: ResellerDnsEntry[], pagination}` | `ResellerDnsCollection` |
+| `GET /resellers/{reseller}/dns` | `{data: ResellerDnsEntry[], pagination}` | `ResellerDnsCollection` |
+| `PUT /resellers/{reseller}/dns` | `{data: DnsMutation}` | `DnsMutation` |
+| `POST /resellers/dns/replace` | `{data: DnsMutation}` | `DnsMutation` |
+| `POST /resellers/dns/apply` | `{data: DnsMutation}` | `DnsMutation` |
+| `GET /resellers/dns/history` | `{data: DnsHistoryEntry[], pagination}` | `DnsHistoryCollection` |
+| `POST /resellers/dns/history/{batch}/revert` | `{data: DnsRevertResult}` | `DnsRevert` |
+
+```ts
+OwnDnsEntry {
+  server_id: string
+  server_name: string
+  dns: string | null              // seu DNS; null quando não definido
+  inherited_dns: string | null    // DNS usado quando você não tem
+}
+
+ResellerDnsEntry {
+  id: string                      // userHash:serverHash
+  user_id: string
+  username: string
+  parent: string | null
+  server_id: string
+  server_name: string
+  dns: string
+  editable: boolean
+  purchased: boolean              // host DNS é domínio comprado de terceiro
+}
+
+DnsHistoryEntry {
+  id: string
+  batch_id: string
+  action: "own_update" | "set" | "update" | "replace"
+        | "apply_to_subresellers" | "revert" | "referral_signup"
+        | "domain_apply_self" | "domain_apply_subresellers"
+        | "domain_remove_self" | "domain_remove_subresellers"
+        | "domain_deleted" | "command_remove_dns"   // 13 valores
+  actor: string | null
+  created_at: string              // date-time
+  username: string | null
+  server_name: string | null
+  old_dns: string | null
+  new_dns: string | null
+  reverted: boolean
+  revertable: boolean
+}
+
+DnsMutation {
+  updated_count: integer
+  protected_count: integer        // sempre 0, segundo o spec
+}
+
+DnsRevertResult {
+  updated_count: integer
+  skipped_count: integer
+}
+
+OwnDnsUpdated {
+  updated_count: integer
+}
+```
+
+Notas:
+
+- `OwnDnsCollection` não tem `meta` nem `pagination`; as demais listagens de
+  DNS usam `pagination` (§7.1).
+- `ResellerDnsEntry.dns` é `string` (não nullable); `editable` e `purchased`
+  são boolean.
+- O enum de `action` tem exatamente **13 valores**; não inventar valores fora
+  da lista.
+
+### 8.9 Bodies de escrita
 
 ```ts
 CustomerCreate {
@@ -527,17 +691,38 @@ CustomerCreate {
   password?: string
   mac_address?: string | null
   plan_price?: unknown | null
-  expires_at?: string | null
+  expires_at?: string | null        // date-time
   trial_hours?: number | null
-  connections?: integer            // default 1, mínimo 1
-  name?, email?, telegram?, whatsapp?, note?: string | null
-  playlist?: string | null
+  connections?: integer             // default 1, mínimo 1
+  name?: string | null
+  email?: string | null             // format: email
+  telegram?: string | null
+  whatsapp?: string | null
+  note?: string | null
+  playlist?: string | null          // format: uri
   bouquets?: unknown | null
   status?: "ACTIVE" | "INACTIVE" | null
-  is_mag?, is_asnlock?, is_isplock?: "YES" | "NO" | null
+  is_mag?: "YES" | "NO" | null
+  is_asnlock?: "YES" | "NO" | null
+  is_isplock?: "YES" | "NO" | null
 }
 
-CustomerUpdate { /* todos os campos opcionais; mesmos nomes, subconjunto */ }
+CustomerUpdate {
+  // todos opcionais; este é o subconjunto gravável
+  username?: string
+  password?: string
+  mac_address?: string | null
+  plan_price?: unknown | null
+  name?: string | null
+  email?: string | null             // format: email
+  telegram?: string | null
+  whatsapp?: string | null
+  note?: string | null
+  playlist?: string | null          // format: uri
+  bouquets?: unknown | null
+}
+// NÃO graváveis por CustomerUpdate: server_id, package_id, expires_at,
+// connections, status e is_* (trial/mag/asnlock/isplock/migrated/restreamer)
 
 ResellerCreate {
   // required: username, password, role, credits
@@ -545,11 +730,16 @@ ResellerCreate {
   credits: integer                 // mínimo 0
   username: string
   password: string
-  email?, name?, telegram?, whatsapp?, note?: string | null
+  email?: string | null            // format: email
+  name?: string | null
+  telegram?: string | null
+  whatsapp?: string | null
+  note?: string | null
   membership_active?: "YES" | "NO" | null
   membership_type?: "FIXED" | "PER_ACTIVE_CUSTOMER" | "PLAN" | null
   membership_plan_type?: "FIXED" | "PER_ACTIVE_CUSTOMER" | null
-  membership_cost?, membership_cost_extra?: unknown | null
+  membership_cost?: unknown | null
+  membership_cost_extra?: unknown | null
   membership_days_recurrency?: integer | null   // 1..3650
   membership_min_customers_to_charge?: unknown | null
   membership_max_number_of_customers?: unknown | null
@@ -559,23 +749,71 @@ ResellerCreate {
   membership_reset_credits_on_expiry_date?: "YES" | "NO" | null
 }
 
+ResellerUpdate {
+  // todos opcionais; NÃO inclui role nem credits (esses são do create)
+  email?: string | null            // format: email
+  username?: string
+  password?: string
+  telegram?: string | null
+  membership_active?: "YES" | "NO" | null
+  membership_type?: "FIXED" | "PER_ACTIVE_CUSTOMER" | "PLAN" | null
+  membership_plan_type?: "FIXED" | "PER_ACTIVE_CUSTOMER" | null
+  membership_cost?: unknown | null
+  membership_cost_extra?: unknown | null
+  membership_days_recurrency?: integer | null   // 1..3650
+  membership_min_customers_to_charge?: unknown | null
+  membership_max_number_of_customers?: unknown | null
+  membership_expiry_date?: string | null         // format: date
+  membership_expiry_time?: string | null
+  membership_credits_to_recharge?: integer | null
+  membership_reset_credits_on_expiry_date?: "YES" | "NO" | null
+  name?: string | null
+  whatsapp?: string | null
+  note?: string | null
+}
+
 CreditsBody {
   // required: credits
   credits: number                  // mínimo 1
-  note?, private_note?: string | null    // maxLength 2000
-  reference?: string | null              // maxLength 255
+  note?: string | null             // maxLength 2000
+  private_note?: string | null     // maxLength 2000
+  reference?: string | null        // maxLength 255
 }
 
-DnsUpdate  { server_id: string; dns: string | null }   // uri, maxLength 255
-DnsReplace { search: string; replace: string; server_id?: string | null }
-DnsApply   { server_id: string; mode: "empty" | "all" }
+DnsUpdate  {
+  server_id: string
+  dns: string | null               // format: uri, maxLength 255; null limpa
+}
+DnsReplace {
+  search: string                   // maxLength 255
+  replace: string                  // format: uri, maxLength 255
+  server_id?: string | null
+}
+DnsApply {
+  server_id: string
+  mode: "empty" | "all"
+}
 ```
+
+Validações de formato que o schema declara (N2):
+
+- `email` em `CustomerCreate`, `CustomerUpdate`, `ResellerCreate` e
+  `ResellerUpdate`: `format: email`.
+- `playlist` em `CustomerCreate` e `CustomerUpdate`: `format: uri`.
+- `DnsUpdate.dns` e `DnsReplace.replace`: `format: uri` e `maxLength: 255`;
+  em `DnsUpdate`, `null` limpa o DNS.
+- `DnsReplace.search`: `maxLength: 255`.
+- `WebhookCreate.events`: `minItems: 1` (não pode ser lista vazia).
+- `WebhookCreate.url`: o schema só declara `format: uri`; a exigência de
+  **HTTPS** e a rejeição de host interno/IP privado estão na **descrição**,
+  não no schema. Valide além do schema.
 
 ## 9. Webhooks
 
 ### 9.1 Quem pode gerenciar
 
-Somente **sessão do painel** (`panelSessionAuth`). Token de API de revenda
+Somente **HTTP Bearer de sessão do painel** (`panelSessionAuth`:
+`type: http`, `scheme: bearer`; **não é cookie**). Token de API de revenda
 **não é aceito**; a operação exige credencial de sessão do painel, e as
 respostas documentadas incluem `401`. Não há escopo de token para
 `/me/webhooks*`. O `llms.txt § Integration guidance` diz para configurar no
@@ -676,21 +914,41 @@ Fonte: `components.responses.*` e `components.schemas.Error`.
 | **403** | `insufficient_scope` | `{error, message}` | token não tem o `x-required-scope` da operação |
 | **403** | `permission_denied` | `{error, message}` | conta não tem a permissão que o escopo exige, ou o dono removeu `use reseller api` do papel |
 | **403** | `ip_not_allowed` | `{error, message}` | IP de origem fora da allowlist do token |
-| **403** | — | `{message}` (só) | servidor indisponível para a conta em `PUT /me/dns` e `PUT /resellers/{reseller}/dns` |
+| **403** | — | `{message}` (só) | servidor indisponível para a conta em `PUT /me/dns`, `PUT /resellers/{reseller}/dns` e `POST /resellers/dns/apply` |
 | **404** | — | `{message: string}` | recurso inexistente **ou não pertencente ao ator** (`NotFound`) |
 | **409** | — | `{message: string}` | username duplicado; `by-username` com mais de um cliente; conflito de replay de idempotência |
-| **422** | — | `{message, errors: {campo: string[]}}` | validação do body (`ValidationError`) |
+| **422** | — | `{message, errors: {campo: string[]}}` | validação do body **ou** estado/conflito de regra (`ValidationError`; ver detalhes) |
 | **429** | — | `{message}` + headers | quota autenticada ou bucket de falha de auth |
 | **400** | — | `{message}` | renovação ou migração recusada; a mensagem diz o motivo |
 
 Detalhes que importam:
 
-- `403` **nem sempre** tem `{error}`: nas duas operações de DNS citadas, o
-  spec descreve “403 with only `message`”. Não assuma o campo `error` sempre.
+- `403` **nem sempre** tem `{error}`: nas **três** operações de DNS citadas, o
+  spec descreve “403 with only `message`”. O componente `TokenForbidden`
+  exige `{error, message}`, então esse 403 é uma **exceção sem schema**;
+  clientes gerados a partir do componente podem falhar ao desserializar.
+  Trate os dois formatos.
+- `422` **não é só validação de campo**. O schema é `ValidationError`
+  (`{message, errors}`), mas o spec usa 422 também para estado/conflito de
+  regra:
+  - `POST /resellers/dns/history/{batch}/revert` — lote já revertido, não
+    revertível ou nada a reverter;
+  - `POST /resellers/dns/apply` — você não tem DNS próprio para o
+    `server_id`;
+  - `POST /me/webhooks/{webhook}/deliveries/replay` — webhook inativo;
+  - `POST /me/webhooks/{webhook}/deliveries/{delivery}/replay` — entrega não
+    elegível ou webhook pausado;
+  - `POST /me/webhooks/{webhook}/test` — webhook inativo.
+  Nesses casos, `errors` pode vir vazio ou ausente; não presuma que existe um
+  campo de body inválido.
 - `404` é a resposta para recurso de outro ator; não é só “não existe”.
 - `429` autenticado traz `X-RateLimit-Limit`, `X-RateLimit-Remaining`,
   `Retry-After` e `X-RateLimit-Reset`. O `429` do bucket de falha de
   autenticação (10/min por IP) traz **somente** `Retry-After`.
+- Os códigos podem ocorrer mesmo quando a operação não os lista: nem toda
+  operação declara `401`/`429` (ex.: `GET /reports/*` só lista 200/403), mas
+  o rate limit e a autenticação são globais via middleware/`llms.txt`. A
+  tabela é uma matriz geral, não uma matriz por operação.
 - O texto de `message` não é contrato; só o status e o campo `error` (quando
   documentado) são.
 
@@ -727,22 +985,30 @@ spec impõe a uma conta de revenda. As duas fontes estão separadas.
 
 ### 12.1 O que foi observado na conta (painel)
 
-Fonte: `docs/auditoria.md` §A14/A17 e `NOTA-capturas.md`.
+Fonte rastreada: `docs/auditoria.md` §A14/A17. Os detalhes de menus, spinner e
+volumes vêm de uma captura local **não versionada** (`NOTA-capturas.md` e
+`capturas/`, ambos no `.gitignore`): ficam registrados como evidência
+operacional ilustrativa, **não reproduzível apenas com o repositório** e nunca
+como contrato. Para reauditar, usar o hash/timestamp da captura original.
 
 - Papel `revenda-pos`, `is_master=false`, `parent_user_id=null`, status
-  `ACTIVE`, `membership_active=YES`; o snapshot auditado tem **54 permissões**
-  (3 amostradas), conforme `docs/auditoria.md` §A14.
+  `ACTIVE`, `membership_active=YES`; o snapshot auditado tem **54 permissões
+  de conta** (3 amostradas), conforme `docs/auditoria.md` §A14.
 - É uma **revenda raiz**, não admin mestre do painel.
-- Menus ausentes nessa conta: **Servidores** (o grupo Sistema só tem Planos e
-  Pacote de Créditos), tickets/suporte, logs/auditoria e configurações
-  globais.
+- Menus ausentes nessa conta (evidência local): **Servidores** (o grupo
+  Sistema só tem Planos e Pacote de Créditos), tickets/suporte,
+  logs/auditoria e configurações globais.
 - A tela “Novos Conteúdos” (`#/content`) consome `/api/servers` e fica em
-  spinner, sem concluir a lista.
+  spinner, sem concluir a lista (evidência local).
 - Apesar do menu ausente, `GET /api/servers` do **painel** responde e é usado
   por outras telas. Ou seja: menu escondido ≠ endpoint inexistente.
-- Volume visto na sessão: 253 clientes, 32 pacotes, 2 servidores, 255
-  lançamentos de crédito. São **contagens da sessão**, não limites do
-  contrato.
+- Volume visto na sessão (evidência local): 253 clientes, 32 pacotes, 2
+  servidores, 255 lançamentos de crédito. São **contagens da sessão**, não
+  limites do contrato.
+
+**Não confundir os dois números:** 54 são **permissões de conta** no painel;
+36 são **escopos de token** do contrato oficial. São conceitos diferentes e
+o spec **não publica** um mapa 1:1 entre eles.
 
 ### 12.2 O que o contrato oficial restringe
 
@@ -777,16 +1043,31 @@ Fonte: `docs/auditoria.md` §A14/A17 e `NOTA-capturas.md`.
 - Quaisquer limites de profundidade além dos explicitamente citados
   (DNS e membership são “direct”; o resto não declara profundidade).
 
-### 12.4 Não confundir os dois `/me`
+### 12.4 Não confundir painel (`/api/*`) com API oficial (`/api/reseller-api/v1/*`)
 
-| Este contrato | Painel |
-|---|---|
-| `GET /api/reseller-api/v1/me` | `GET /api/auth/me` |
-| `{data:{id, username, creditsBalance, integrationStatus, membership}}` | objeto do usuário logado (`role`, `permissions`, `parent`, etc.) |
-| token de API de revenda | token de sessão do painel (Sanctum) |
+O prefixo `/api/*` é a API interna do painel; o prefixo
+`/api/reseller-api/v1/*` é o contrato oficial. Shapes, paginação e tipos
+**não** são os mesmos. Exemplo registrado na auditoria
+(`docs/auditoria-oficial.md` §10/F7):
 
-O `auth/me` do painel **não** é este contrato e não deve ser usado como
-referência de shape para o cliente oficial.
+| | Painel | Oficial |
+|---|---|---|
+| Rota de servidores | `GET /api/servers` | `GET /servers` |
+| `is_isplock` | `0` (number) | `"YES" \| "NO" \| null` |
+| `packages[]` | presente no item de servidor | não existe no `Server` oficial |
+| `reseller_action` | presente no painel | não existe no `Server` oficial |
+
+| | Painel | Oficial |
+|---|---|---|
+| Perfil | `GET /api/auth/me` | `GET /me` |
+| Paginação de clientes | `page` / `perPage` | `page` / `per_page` |
+
+A coluna **Painel** desta seção é evidência local (§12.1), não contrato; a
+coluna **Oficial** vem do spec.
+
+Nunca reutilize o shape do painel no cliente oficial. O `auth/me` do painel
+**não** é este contrato e não deve ser usado como referência de shape para o
+cliente oficial.
 
 ## 13. O que o spec não afirma
 
@@ -803,6 +1084,9 @@ Para evitar alias inventado, ficam explícitos os pontos sem contrato:
   (`nullable: true` apenas). Não inferir string/array/centavos.
 - Os relatórios `low-credits`, `new-resellers` e `expiring` não declaram
   parâmetros de paginação, apesar do envelope `GenericReport`.
+- Em `Coupon.value`, a faixa **1–100** de `PERCENTAGE` e a unidade **centavos**
+  de `FIXED` estão nas descrições; o schema só declara `integer` (com
+  `minimum: 1` no create). Não gere validação só pelo schema.
 - O texto de `message` dos erros não é contrato.
 - O contrato não publica a lista de permissões de conta exigida por cada
   escopo; só o comportamento `403 permission_denied`.
@@ -810,5 +1094,6 @@ Para evitar alias inventado, ficam explícitos os pontos sem contrato:
 ---
 
 Documento escrito em 2026-11-22 a partir de `docs/official-api/openapi.json`
-e `docs/official-api/llms.txt`; a seção 12 usa também `docs/auditoria.md` e
-`NOTA-capturas.md`, citados no texto. Nenhum token real foi incluído.
+e `docs/official-api/llms.txt`; a seção 12 usa `docs/auditoria.md` e
+`docs/auditoria-oficial.md` (rastreados) e uma captura local **não
+versionada**, explicitada em §12.1. Nenhum token real foi incluído.

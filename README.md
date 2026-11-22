@@ -52,8 +52,10 @@ O painel publica a **Sigma Reseller API v1** em
 
 - `Authorization: Bearer <token>` criado em **Integrações → Reseller API**
   (o plaintext aparece uma única vez).
-- Escopos por operação (`x-required-scope`); token pode ser travado por IP.
-- Rate limit: 120 req/min por usuário/tenant, com `429` + `Retry-After`.
+- Escopos por operação (`x-required-scope`, 36 distintos); token pode ser
+  travado por IP.
+- Rate limit: 120 req/min por usuário/tenant, com `X-RateLimit-*` e `429` +
+  `Retry-After`; falha de autenticação tem bucket separado de 10/min por IP.
 - Cobre clientes, planos, servidores, revendas, DNS, cupons, relatórios e
   webhooks com HMAC.
 - `/me/webhooks*` exige sessão do painel, não token de revenda.
