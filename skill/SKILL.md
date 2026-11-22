@@ -32,6 +32,22 @@ fluxo acordado:
 
 Tudo com carimbo de data/hora e origem (`observado` x `inferido`).
 
+## Fase 0.5 — API oficial antes da engenharia reversa
+
+Antes de capturar rede, procure no próprio painel:
+
+- `/openapi.json`, `/swagger.json`, `/api-docs`, `/docs`, `/redoc`;
+- `/llms.txt` (documentação em texto para IA);
+- menu **Integrações / API / Developers / Webhooks**.
+
+Se existir API oficial com token e escopos, ela é o **contrato preferencial**:
+cobre CRUD, webhooks, rate limit e erros. A API interna do SPA fica só para
+lacunas de UI e nunca deve ser o caminho principal.
+
+Se o bundle JS tiver aviso de licença proibindo engenharia reversa
+(`AI-NO-REPRODUCE`, `proprietary`, `all rights reserved`), **pare a análise de
+código** e use a API oficial; registre o achado para o dono.
+
 ## Regras de ouro (não negociáveis)
 
 1. **Só campo observado vira contrato.** Se não apareceu numa resposta real,
@@ -51,6 +67,9 @@ Tudo com carimbo de data/hora e origem (`observado` x `inferido`).
 7. **Sem força bruta, sem bypass.** Não testar IDOR, não trocar id de outro
    tenant, não burlar 2FA/CAPTCHA. Se aparecer dado de outro cliente na
    resposta, parar e reportar.
+8. **API oficial vence.** Se o painel publica OpenAPI/`llms.txt`, documente e
+   use essa API. Não reconstrua por scraping o que já tem contrato — e nunca
+   redistribua bundle proprietário.
 
 ## Time e papéis (4 agentes)
 

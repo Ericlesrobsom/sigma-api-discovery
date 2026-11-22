@@ -19,6 +19,12 @@ _replay*
 _erros*
 capturar.ps1
 exportar-b64.js
+NOTA-capturas*.md
+escrever-nota.ps1
+exportar-amostra.js
+hook-rede-full.js
+recon-b64.js
+sonda-headers.js
 
 # bundles JS proprietários (licença AI-NO-REPRODUCE) — somente locais
 bundles/

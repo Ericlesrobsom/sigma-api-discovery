@@ -18,22 +18,47 @@ Aqui vale a mesma regra: só campo observado vira contrato.
 
 - Alvo: `https://espaceoneplay.sigmab.pro`
 - Sessão de teste autenticada (2FA desativada)
-- SPA Vue + Vite; API em `/api`; token em `localStorage.token`
+- SPA Vue + Vite; API interna em `/api`; token em `localStorage.token`
+- **API oficial descoberta:** Sigma Reseller API v1 (OpenAPI 3.1, 39 paths /
+  51 operações) em `/api/reseller-api/v1` — ver
+  [`docs/api-oficial.md`](docs/api-oficial.md)
 - Recon inicial e primeiros endpoints em [`docs/capturas.md`](docs/capturas.md)
-- Mapa em construção em [`docs/mapa.md`](docs/mapa.md)
+- Mapa interno em construção em [`docs/mapa.md`](docs/mapa.md)
 
 ## Estrutura
 
 ```
 docs/
-  mapa.md        # mapa da API (observado x inferido x pendente)
+  api-oficial.md # API oficial: auth, escopos, endpoints, webhooks
+  official-api/  # openapi.json + llms.txt (documentação pública)
+  mapa.md        # mapa da API interna (observado x inferido x pendente)
   capturas.md    # evidências sanitizadas por fluxo
   decisoes.md    # escopo, papéis e regras
+  auditoria.md   # achados do Auditor
 skill/
   SKILL.md       # skill do Maestri (4 agentes)
   assets/        # hook de rede, inspetor, loader, template
 client/          # futuro cliente (Go) — ainda não iniciado
 ```
+
+`bundles/` (JS proprietário baixado para análise) fica **somente local** e no
+`.gitignore`: a licença do bundle proíbe redistribuição e engenharia reversa.
+O caminho de integração é a API oficial.
+
+## Caminho de integração: API oficial
+
+O painel publica a **Sigma Reseller API v1** em
+`https://espaceoneplay.sigmab.pro/api/reseller-api/v1`:
+
+- `Authorization: Bearer <token>` criado em **Integrações → Reseller API**
+  (o plaintext aparece uma única vez).
+- Escopos por operação (`x-required-scope`); token pode ser travado por IP.
+- Rate limit: 120 req/min por usuário/tenant, com `429` + `Retry-After`.
+- Cobre clientes, planos, servidores, revendas, DNS, cupons, relatórios e
+  webhooks com HMAC.
+- `/me/webhooks*` exige sessão do painel, não token de revenda.
+- Spec: [`docs/official-api/openapi.json`](docs/official-api/openapi.json) ·
+  Doc: [`docs/official-api/llms.txt`](docs/official-api/llms.txt)
 
 ## A skill (Maestri)
 
